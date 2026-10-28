@@ -1,0 +1,143 @@
+substitutions:
+  name: esphome-web-36b17c
+  friendly_name: ESPHome Web 36b17c
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  name_add_mac_suffix: false
+  project:
+    name: esphome.web
+    version: '1.0'
+  # ...
+  on_boot:
+    priority: 700
+    # ...
+    then:
+      - output.turn_on: gpio_14
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "9GUvJ1GIWx8GQIOD8DWCWBhgB4icavhBSCUQsG9H17Q="
+
+# Allow Over-The-Air updates
+ota:
+  - platform: esphome
+    password: "9590dd78541b86936086f10f6d018ee6"
+
+# Allow provisioning Wi-Fi via serial
+improv_serial:
+
+wifi:
+  # Set up a wifi access point
+  ap: {}
+
+# In combination with the `ap` this allows the user
+# to provision wifi credentials to the device via WiFi AP.
+captive_portal:
+
+dashboard_import:
+  package_import_url: github://esphome/example-configs/esphome-web/esp32.yaml@main
+  import_full_config: true
+
+# Sets up Bluetooth LE (Only on ESP32) to allow the user
+# to provision wifi credentials to the device.
+esp32_improv:
+  authorizer: none
+
+# To have a "next url" for improv serial
+web_server:
+
+i2c:
+  - id: bus_a
+    sda: 26
+    scl: 27
+    scan: true
+
+deep_sleep:
+  run_duration: 1min
+  sleep_duration: 30min
+
+output:
+  - platform: gpio
+    pin:  14
+    id: gpio_14
+
+
+sensor:
+  - platform: bme280_i2c
+    i2c_id: bus_a
+    address: 0x76
+    temperature:
+      name: "Temperature Extérieur"
+    pressure:
+      name: "Pression Atmospherique "
+    humidity:
+     name: "Humidité Extérieur"
+    update_interval: 10s
+    
+  - platform: dht
+    pin: 22
+    model: DHT22
+    temperature:
+      name: "Temperature Ruche"
+    humidity:
+      name: "Humidité Ruche"
+    update_interval: 2s
+  - platform: hx711
+    name: "Peson AvD"
+    dout_pin: 19
+    clk_pin: 23
+    gain: 128
+    accuracy_decimals: 3
+    update_interval: 2s
+    filters:
+      - calibrate_linear:
+          - 16500 -> 0
+          - 102000 -> 1
+    unit_of_measurement: kg
+  - platform: hx711
+    name: "Peson AvG"
+    dout_pin: 18
+    clk_pin: 5
+    gain: 128
+    accuracy_decimals: 3
+    update_interval: 2s
+    filters:
+      - calibrate_linear:
+          - 24400 -> 0
+          - -63000 -> 1
+    unit_of_measurement: kg
+  - platform: hx711
+    name: "Peson ArD"
+    dout_pin: 17
+    clk_pin: 16
+    gain: 128
+    accuracy_decimals: 3
+    update_interval: 2s
+    filters:
+      - calibrate_linear:
+          - 25000 -> 0
+          - 63900 -> 1
+    unit_of_measurement: kg
+  - platform: hx711
+    name: "Peson ArG"
+    dout_pin: 32
+    clk_pin: 33
+    gain: 128
+    accuracy_decimals: 3
+    update_interval: 2s
+    filters:
+      - calibrate_linear:
+          - 30800 -> 0
+          - -117560 -> 1
+    unit_of_measurement: kg
