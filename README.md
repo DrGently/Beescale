@@ -25,3 +25,7 @@ Module(s) HX711	Convertisseur pour les pesons
 Capteur BME280 (ou équivalent)	Température, humidité, pression
 Batterie + panneau solaire (optionnel)	Pour un rucher sans alimentation
 Boîtier étanche	Protection contre la pluie
+
+
+Blueprint automatisation: 
+[![Importer le blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2DrGently%2Fbeescale%2Fblob%2Fmain%2Fhomeassistant%2Fblueprints%2Fautomation%2Fbeescale_settings.yaml)
