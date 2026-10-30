@@ -1,0 +1,105 @@
+# =====================================================================
+#  Blueprint : BeeScale - Alerte essaimage
+# =====================================================================
+blueprint:
+  name: 🐝 BeeScale - Alerte essaimage
+  description: >-
+    Envoie une alerte quand la ruche perd brutalement du poids sur une
+    période donnée (essaimage suspecté). Il faut un capteur qui donne la
+    variation de poids sur la période (le package fourni crée un capteur
+    « statistics » de type « change » sur 4 h). L'alerte ne se déclenche
+    qu'une fois, puis se réarme quand la variation repasse au-dessus du seuil.
+  domain: automation
+  source_url: https://github.com/DrGently/beescale/blob/main/homeassistant/blueprints/automation/beescale_swarm_alert.yaml
+  input:
+    sensor_section:
+      name: 1. Détection
+      icon: mdi:chart-line-variant
+      collapsed: false
+      input:
+        loss_sensor:
+          name: Capteur de variation du poids
+          description: >-
+            Variation du poids sur la période (en kg, négative en cas de
+            perte). Exemple : un capteur statistics « change » sur 4 h.
+          selector:
+            entity:
+              domain: sensor
+        threshold:
+          name: Seuil de perte (valeur négative)
+          description: >-
+            L'alerte part quand la variation passe sous cette valeur.
+            Exemple : -1 pour une perte de 1 kg.
+          default: -1
+          selector:
+            number:
+              min: -20
+              max: 0
+              step: 0.1
+              unit_of_measurement: kg
+              mode: box
+        trigger_for:
+          name: Confirmation avant l'alerte
+          description: >-
+            La variation doit rester sous le seuil pendant cette durée
+            (évite les fausses alertes lors d'une manipulation de la ruche).
+          default:
+            hours: 0
+            minutes: 1
+            seconds: 0
+          selector:
+            duration:
+    message_section:
+      name: 2. Notification
+      icon: mdi:bell-ring-outline
+      collapsed: false
+      input:
+        hive_name:
+          name: Nom de la ruche
+          description: Disponible dans les notifications avec {{ hive_name }}.
+          default: BeeScale
+          selector:
+            text:
+        period_label:
+          name: Durée de la période (texte)
+          description: >-
+            Texte seulement, pour les messages ({{ period_label }}).
+            Il doit correspondre à la période du capteur de variation.
+          default: 4 h
+          selector:
+            text:
+        notification_actions:
+          name: Actions de notification
+          description: >-
+            Variables disponibles : {{ hive_name }}, {{ weight_loss }} (perte
+            en kg, valeur positive) et {{ period_label }}. Par défaut, une
+            notification persistante est créée dans Home Assistant.
+          default:
+            - action: persistent_notification.create
+              data:
+                title: "🐝 Risque d'essaimage"
+                message: >-
+                  {{ hive_name }} a perdu {{ weight_loss }} kg en
+                  {{ period_label }}. Un essaimage est suspecté !
+          selector:
+            action:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  loss_sensor: !input loss_sensor
+  hive_name: !input hive_name
+  period_label: !input period_label
+  weight_loss: "{{ states(loss_sensor) | float(0) | abs | round(2) }}"
+
+triggers:
+  - trigger: numeric_state
+    entity_id: !input loss_sensor
+    below: !input threshold
+    for: !input trigger_for
+
+conditions: []
+
+actions:
+  - sequence: !input notification_actions
