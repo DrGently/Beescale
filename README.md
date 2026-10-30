@@ -28,4 +28,10 @@ Boîtier étanche	Protection contre la pluie
 
 
 Blueprint automatisation: 
+réglage configuration : 
 [![Importer le blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FDrGently%2Fbeescale%2Fblob%2Fmain%2Fhomeassistant%2Fblueprints%2Fautomation%2Fbeescale_settings.yaml)
+
+alerte essaimage: 
+[![Importer le blueprint](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://github.com/DrGently/Beescale/blob/main/BeeScale%20-%20Alerte%20essaimage)
+
+
