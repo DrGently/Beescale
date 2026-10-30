@@ -1,104 +1,132 @@
 # =====================================================================
 #  Blueprint : BeeScale - Alerte essaimage
+#  Emplacement manuel : /config/blueprints/automation/beescale_swarm_alert.yaml
+#  Import GitHub      : /config/blueprints/automation/DrGently/beescale_swarm_alert.yaml
 # =====================================================================
 blueprint:
   name: 🐝 BeeScale - Alerte essaimage
   description: >-
-    Envoie une alerte quand la ruche perd brutalement du poids sur une
-    période donnée (essaimage suspecté). Il faut un capteur qui donne la
-    variation de poids sur la période (le package fourni crée un capteur
-    « statistics » de type « change » sur 4 h). L'alerte ne se déclenche
-    qu'une fois, puis se réarme quand la variation repasse au-dessus du seuil.
+    Envoie une notification sur téléphone quand la dérive du poids de la
+    ruche passe sous un seuil (perte de poids rapide : essaimage probable).
+    Le message indique le poids perdu sur une durée égale à la durée de
+    deep sleep. L'alerte ne part qu'une fois, puis se réarme quand la
+    dérive repasse au-dessus du seuil.
   domain: automation
-  source_url: https://github.com/DrGently/beescale/blob/main/homeassistant/blueprints/automation/beescale_swarm_alert.yaml
+  source_url: https://github.com/DrGently/Beescale/blob/main/homeassistant/blueprints/automation/beescale_swarm_alert.yaml
   input:
-    sensor_section:
+    detection_section:
       name: 1. Détection
       icon: mdi:chart-line-variant
       collapsed: false
       input:
-        loss_sensor:
-          name: Capteur de variation du poids
+        derive_sensor:
+          name: Helper de dérivée du poids
           description: >-
-            Variation du poids sur la période (en kg, négative en cas de
-            perte). Exemple : un capteur statistics « change » sur X temps.
+            Le capteur « Dérivée » du poids de la ruche (négatif quand la
+            ruche perd du poids), par exemple en kg/h.
           selector:
             entity:
               domain: sensor
-        threshold:
-          name: Seuil de perte (valeur négative)
+        threshold_helper:
+          name: Helper du seuil d'alerte
           description: >-
-            L'alerte part quand la variation passe sous cette valeur.
-            Exemple : -1 pour une perte de 1 kg.
-          default: -0,5
+            Un helper numérique (input_number) contenant le seuil, dans la
+            même unité que la dérivée. Exemple : 0.5 pour une alerte quand la
+            dérivée passe sous -0.5. Le signe n'a pas d'importance.
           selector:
-            number:
-              min: -20
-              max: 0
-              step: 0.1
-              unit_of_measurement: kg
-              mode: box
-        trigger_for:
-          name: Confirmation avant l'alerte
-          description: >-
-            La variation doit rester sous le seuil pendant cette durée
-            (évite les fausses alertes lors d'une manipulation de la ruche).
-          default:
-            hours: 0
-            minutes: 1
-            seconds: 0
-          selector:
-            duration:
-    message_section:
-      name: 2. Notification
-      icon: mdi:bell-ring-outline
+            entity:
+              domain: input_number
+    sleep_section:
+      name: 2. Durée de référence
+      icon: mdi:sleep
       collapsed: false
       input:
+        sleep_helper:
+          name: Helper de durée de deep sleep
+          description: >-
+            Sert de durée dans le message : poids perdu sur cette durée.
+            L'unité (s, min ou h) est lue sur le helper, minutes par défaut.
+          selector:
+            entity:
+              domain: input_number
+    notify_section:
+      name: 3. Notification
+      icon: mdi:cellphone-message
+      collapsed: false
+      input:
+        notify_devices:
+          name: Téléphone(s) à alerter
+          description: Appareils où l'application Home Assistant est installée.
+          selector:
+            device:
+              multiple: true
+              filter:
+                - integration: mobile_app
         hive_name:
           name: Nom de la ruche
-          description: Disponible dans les notifications avec {{ hive_name }}.
-          default: BeeScale
+          description: Utilisé dans le message.
+          default: La ruche
           selector:
-            text
-        period_label: 
-          description: période durant laquelle la ruche a perdu du poids
-          default:
-          selector: 
-          entity:
-        notification_actions:
-          name: Actions de notification
-          description: >-
-            Variables disponibles : {{ hive_name }}, {{ weight_loss }} (perte
-            en kg, valeur positive) et {{ period_label }}. Par défaut, une
-            notification persistante est créée dans Home Assistant.
-          default:
-            - action: notify.send_message
-            selector:
-            entity:
-              data:
-                title: "🐝 Risque d'essaimage"
-                message: >-
-                  {{ hive_name }} a perdu {{ weight_loss }} kg en
-                  {{ period_label }}. Un essaimage est suspecté !
-          selector:
-            action:
+            text:
 
 mode: single
 max_exceeded: silent
 
+trigger_variables:
+  derive_sensor: !input derive_sensor
+  threshold_helper: !input threshold_helper
+
 variables:
-  loss_sensor: !input loss_sensor
+  derive_sensor: !input derive_sensor
+  sleep_helper: !input sleep_helper
   hive_name: !input hive_name
-  period_label: !input period_label
-  weight_loss: "{{ states(loss_sensor) | float(0) | abs | round(2) }}"
+  # Durée de deep sleep en secondes (unité lue sur le helper)
+  sleep_seconds: >-
+    {% set u = state_attr(sleep_helper, 'unit_of_measurement') | default('min', true) | lower %}
+    {% set f = 1 if u in ['s', 'sec', 'secs', 'second', 'seconds', 'seconde', 'secondes']
+       else 3600 if u in ['h', 'hr', 'hour', 'hours', 'heure', 'heures']
+       else 60 %}
+    {{ states(sleep_helper) | float(0) * f }}
+  # Unité de la dérivée, par exemple kg/h -> poids "kg", temps "h"
+  derive_unit: "{{ state_attr(derive_sensor, 'unit_of_measurement') | default('kg/h', true) }}"
+  weight_unit: "{{ derive_unit.split('/')[0] }}"
+  rate_seconds: >-
+    {% set t = derive_unit.split('/')[-1] | lower %}
+    {{ 1 if t in ['s'] else 60 if t in ['min'] else 86400 if t in ['d'] else 3600 }}
+  # Poids perdu sur la durée de deep sleep
+  weight_loss: >-
+    {{ (states(derive_sensor) | float(0) | abs * sleep_seconds | float(0)
+        / rate_seconds | float(3600)) | round(2) }}
+  # Durée de deep sleep lisible (15 min, 1 h 30...)
+  period_label: >-
+    {% set m = (sleep_seconds | float(0) / 60) | round(0) | int %}
+    {% if sleep_seconds | float(0) < 60 %}{{ sleep_seconds | float(0) | round(0) | int }} s
+    {% elif m >= 60 %}{{ m // 60 }} h{% if m % 60 %} {{ m % 60 }} min{% endif %}
+    {% else %}{{ m }} min{% endif %}
 
 triggers:
-  - trigger: numeric_state
-    entity_id: !input loss_sensor
-    below: !input threshold
-    for: !input trigger_for
+  # Se déclenche quand la dérive passe sous -seuil, se réarme au retour
+  - trigger: template
+    value_template: >-
+      {% set d = states(derive_sensor) | float(none) %}
+      {% set t = states(threshold_helper) | float(none) %}
+      {{ d is not none and t is not none and d < -(t | abs) }}
 
 conditions: []
 
 actions:
-  - sequence: !input notification_actions
+  - repeat:
+      for_each: !input notify_devices
+      sequence:
+        - action: "notify.mobile_app_{{ device_attr(repeat.item, 'name') | slugify }}"
+          data:
+            title: "🐝 Risque d'essaimage"
+            message: >-
+              {{ hive_name }} a perdu {{ weight_loss }} {{ weight_unit }}
+              en {{ period_label | trim }}. Un essaimage est probablement en cours !
+            data:
+              tag: "essaimage-{{ hive_name | slugify }}"
+              push:
+                interruption-level: time-sensitive
+              ttl: 0
+              priority: high
