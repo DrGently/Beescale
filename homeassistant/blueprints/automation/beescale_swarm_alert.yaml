@@ -21,7 +21,7 @@ blueprint:
           name: Capteur de variation du poids
           description: >-
             Variation du poids sur la période (en kg, négative en cas de
-            perte). Exemple : un capteur statistics « change » sur 4 h.
+            perte). Exemple : un capteur statistics « change » sur X temps.
           selector:
             entity:
               domain: sensor
@@ -30,7 +30,7 @@ blueprint:
           description: >-
             L'alerte part quand la variation passe sous cette valeur.
             Exemple : -1 pour une perte de 1 kg.
-          default: -1
+          default: -0,5
           selector:
             number:
               min: -20
@@ -59,15 +59,12 @@ blueprint:
           description: Disponible dans les notifications avec {{ hive_name }}.
           default: BeeScale
           selector:
-            text:
-        period_label:
-          name: Durée de la période (texte)
-          description: >-
-            Texte seulement, pour les messages ({{ period_label }}).
-            Il doit correspondre à la période du capteur de variation.
-          default: 4 h
-          selector:
-            text:
+            text
+        period_label: 
+          description: période durant laquelle la ruche a perdu du poids
+          default:
+          selector: 
+          entity:
         notification_actions:
           name: Actions de notification
           description: >-
@@ -75,7 +72,9 @@ blueprint:
             en kg, valeur positive) et {{ period_label }}. Par défaut, une
             notification persistante est créée dans Home Assistant.
           default:
-            - action: persistent_notification.create
+            - action: notify.send_message
+            selector:
+            entity:
               data:
                 title: "🐝 Risque d'essaimage"
                 message: >-
