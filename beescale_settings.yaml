@@ -1,0 +1,214 @@
+# =====================================================================
+#  Blueprint : BeeScale - Réglages et contrôle du deep sleep
+#  Emplacement manuel : /config/blueprints/automation/beescale_settings.yaml
+#  Import GitHub      : /config/blueprints/automation/TON-COMPTE/beescale_settings.yaml
+# =====================================================================
+blueprint:
+  name: ⚙️ BeeScale - Réglages et contrôle du deep sleep
+  description: >-
+    Envoie vers l'ESP32 les réglages (durée d'éveil, durée de deep sleep,
+    empêcher le sommeil) mémorisés dans des helpers Home Assistant.
+    Les réglages sont appliqués dès que l'ESP se réveille.
+    L'option « Empêcher le sommeil » se coupe automatiquement après un délai.
+    Un blueprint ne peut pas créer les helpers : utilise le package
+    `beescale_package_template.yaml` pour les créer.
+  domain: automation
+  source_url: https://github.com/DrGently/beescale/blob/main/homeassistant/blueprints/automation/beescale_settings.yaml
+  input:
+    helpers_section:
+      name: 1. Helpers Home Assistant
+      icon: mdi:form-select
+      description: Les réglages mémorisés côté Home Assistant.
+      collapsed: false
+      input:
+        run_helper:
+          name: Helper - Durée d'éveil (run)
+          selector:
+            entity:
+              domain: input_number
+        sleep_helper:
+          name: Helper - Durée de deep sleep
+          selector:
+            entity:
+              domain: input_number
+        prevent_helper:
+          name: Helper - Empêcher le sommeil
+          selector:
+            entity:
+              domain: input_boolean
+    esp_section:
+      name: 2. Entités de l'ESP32
+      icon: mdi:chip
+      description: Les entités exposées par ESPHome pour ce BeeScale.
+      collapsed: false
+      input:
+        esp_run:
+          name: ESP - Durée d'éveil (run)
+          selector:
+            entity:
+              domain: number
+        esp_sleep:
+          name: ESP - Durée de deep sleep
+          selector:
+            entity:
+              domain: number
+        esp_prevent:
+          name: ESP - Empêcher le sommeil
+          selector:
+            entity:
+              domain: switch
+        esp_wake_sensor:
+          name: ESP - Capteur qui change à chaque réveil
+          description: >-
+            Par exemple la température extérieure. Sa mise à jour indique
+            que l'ESP est réveillé et joignable.
+          selector:
+            entity:
+              domain: sensor
+    options_section:
+      name: 3. Options
+      icon: mdi:cog-outline
+      collapsed: true
+      input:
+        prevent_timeout:
+          name: Arrêt automatique de « Empêcher le sommeil »
+          description: >-
+            Au bout de ce délai, le helper et l'interrupteur de l'ESP
+            sont coupés pour que l'ESP puisse se rendormir.
+          default:
+            hours: 0
+            minutes: 20
+            seconds: 0
+          selector:
+            duration:
+        notification_actions:
+          name: Actions de notification (ESP en ligne)
+          description: >-
+            Exécutées quand l'ESP est réveillé et que « Empêcher le sommeil »
+            vient d'être activé. Exemple : notify.mobile_app_...
+          default: []
+          selector:
+            action:
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  run_helper: !input run_helper
+  sleep_helper: !input sleep_helper
+  prevent_helper: !input prevent_helper
+  esp_run: !input esp_run
+  esp_sleep: !input esp_sleep
+  esp_prevent: !input esp_prevent
+
+triggers:
+  # Un helper est modifié
+  - trigger: state
+    id: helper
+    entity_id:
+      - !input run_helper
+      - !input sleep_helper
+      - !input prevent_helper
+    not_from:
+      - unavailable
+      - unknown
+  # L'ESP vient de se réveiller
+  - trigger: state
+    id: wake
+    entity_id: !input esp_wake_sensor
+    not_from:
+      - unknown
+  - trigger: state
+    id: wake
+    entity_id: !input esp_prevent
+    from: unavailable
+  # « Empêcher le sommeil » est resté actif trop longtemps
+  - trigger: state
+    id: timeout
+    entity_id: !input prevent_helper
+    to: "on"
+    for: !input prevent_timeout
+
+actions:
+  - choose:
+      # --- Fin du délai : on remet l'ESP en mode normal ---
+      - conditions:
+          - condition: trigger
+            id: timeout
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input prevent_helper
+          - action: switch.turn_off
+            target:
+              entity_id: !input esp_prevent
+    # --- Cas général : synchroniser les helpers vers l'ESP ---
+    default:
+      # Si un helper vient de changer, on attend le prochain réveil de l'ESP
+      - if:
+          - condition: trigger
+            id: helper
+        then:
+          - wait_for_trigger:
+              - trigger: state
+                entity_id: !input esp_wake_sensor
+                not_from:
+                  - unknown
+              - trigger: state
+                entity_id: !input esp_prevent
+                from: unavailable
+            timeout: "24:00:00"
+            continue_on_timeout: false
+      # On s'assure que l'ESP est bien joignable
+      - wait_template: >-
+          {{ not is_state(esp_run, ['unavailable', 'unknown'])
+             and not is_state(esp_sleep, ['unavailable', 'unknown'])
+             and not is_state(esp_prevent, ['unavailable', 'unknown']) }}
+        timeout: "00:05:00"
+        continue_on_timeout: false
+      - delay: "00:00:02"
+
+      # Durée d'éveil
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states(esp_run) | float(0) != states(run_helper) | float(0) }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: !input esp_run
+            data:
+              value: "{{ states(run_helper) | float }}"
+
+      # Durée de deep sleep
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states(esp_sleep) | float(0) != states(sleep_helper) | float(0) }}
+        then:
+          - action: number.set_value
+            target:
+              entity_id: !input esp_sleep
+            data:
+              value: "{{ states(sleep_helper) | float }}"
+
+      # Empêcher le sommeil
+      - if:
+          - condition: template
+            value_template: >-
+              {{ states(esp_prevent) != states(prevent_helper) }}
+        then:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: !input prevent_helper
+                    state: "on"
+                sequence:
+                  - action: switch.turn_on
+                    target:
+                      entity_id: !input esp_prevent
+                  - sequence: !input notification_actions
+            default:
+              - action: switch.turn_off
+                target:
+                  entity_id: !input esp_prevent
